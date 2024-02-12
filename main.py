@@ -122,6 +122,10 @@ def yolo_detect_and_segment(
         # Extract class index
         class_index = class_indexes[box_index]
 
+        # Uncomment code below to exclude aeroplane from annotations
+        if classes[class_index] == "aeroplane":
+            continue
+
         # Extract bounding box
         x, y, w, h = boxes[box_index]
 
