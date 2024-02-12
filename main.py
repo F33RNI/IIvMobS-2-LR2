@@ -33,11 +33,8 @@ from typing import List, Tuple
 import cv2
 import numpy as np
 
-# Path to photo to recognize. Or set PHOTO_INPUT to None to use VIDEO_INPUT instead
-PHOTO_INPUT = None  #  "photos/plane_stock.jpg"
-
-# Path to video file or integer (0..) to use webcam instead. Or set VIDEO_INPUT to None to use IMAGE_INPUT instead
-VIDEO_INPUT = "videos/planes_stock.mp4"
+# Path to input image, video file or integer (0..) to use webcam instead
+PHOTO_VIDEO_INPUT = "photos/plane_stock.jpg"
 
 # Path to yolo directory with yolov4-tiny.cfg and yolov4-tiny.cfg files
 YOLO_DIR = "yolov4-tiny"
@@ -70,7 +67,7 @@ def logging_setup() -> None:
     root_logger.setLevel(logging.INFO)
 
     # Log test message
-    logging.warning("Logging setup is complete")
+    logging.info("Logging setup is complete")
 
 
 def yolo_detect_and_segment(
@@ -173,33 +170,19 @@ def main() -> None:
     out_layers_indexes = net.getUnconnectedOutLayers()
     out_layers = [layer_names[index - 1] for index in out_layers_indexes]
 
-    # Variables for frame and video capture
-    frame = None
-    capture = None
-
-    # Load image from file
-    if PHOTO_INPUT is not None:
-        with open(PHOTO_INPUT, "rb") as file_stream:
-            image_bytes = np.asarray(bytearray(file_stream.read()), dtype=np.uint8)
-            frame = cv2.imdecode(image_bytes, cv2.IMREAD_COLOR)
-            del image_bytes
-
     # Start OpenCV video capture
-    elif VIDEO_INPUT is not None:
-        capture = cv2.VideoCapture(VIDEO_INPUT)
-
-    # No PHOTO_INPUT or VIDEO_INPUT
-    else:
-        raise Exception("No PHOTO_INPUT or VIDEO_INPUT specified")
+    capture = cv2.VideoCapture(PHOTO_VIDEO_INPUT)
 
     # Main loop
     while True:
         # Capture the video frame by frame
-        if capture is not None:
-            _, frame = capture.read()
+        _, frame = capture.read()
 
         # Exit if no frame
         if frame is None:
+            # Wait for any key and exit
+            logging.info("Done! Press any key to exit")
+            cv2.waitKey(0)
             break
 
         # Detect, segment and annotate
@@ -210,7 +193,7 @@ def main() -> None:
 
         # 30 - 1/30 FPS
         # Press q to quit
-        if cv2.waitKey(30 if capture is not None else 0) & 0xFF == ord("q"):
+        if cv2.waitKey(30) & 0xFF == ord("q"):
             break
 
     # Release the cap object after the loop
