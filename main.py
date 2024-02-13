@@ -34,7 +34,7 @@ import cv2
 import numpy as np
 
 # Path to input image, video file or integer (0..) to use webcam instead
-PHOTO_VIDEO_INPUT = "photos/plane_stock.jpg"
+PHOTO_VIDEO_INPUT = "videos/planes_stock.mp4"
 
 # Path to yolo directory with yolov4-tiny.cfg and yolov4-tiny.cfg files
 YOLO_DIR = "yolov4-tiny"
@@ -70,14 +70,14 @@ def logging_setup() -> None:
     logging.info("Logging setup is complete")
 
 
-def yolo_detect_and_segment(
+def yolo_detect_and_localize(
     image_to_process: np.ndarray,
     net: cv2.dnn.Net,
     out_layers: List[str],
     classes: List[str],
     colors: List[Tuple[int, int, int]],
 ) -> np.ndarray:
-    """Recognizes and segments object on image
+    """Recognizes and localizes object on image
 
     Args:
         image_to_process (np.ndarray): source image
@@ -92,13 +92,15 @@ def yolo_detect_and_segment(
 
     height, width, _ = image_to_process.shape
 
-    # Detect objects
+    # Prepare image
     blob = cv2.dnn.blobFromImage(image_to_process, 1 / 255, (608, 608), (0, 0, 0), swapRB=True, crop=False)
+
+    # Feed image
     net.setInput(blob)
     outs = net.forward(out_layers)
-    class_indexes, class_scores, boxes = ([] for _ in range(3))
 
-    # Parse bounding boxes
+    # Parse results into class_indexes, class_scores and bounding boxes
+    class_indexes, class_scores, boxes = ([] for _ in range(3))
     for out in outs:
         for obj in out:
             scores = obj[5:]
@@ -123,24 +125,36 @@ def yolo_detect_and_segment(
         class_index = class_indexes[box_index]
 
         # Uncomment code below to exclude aeroplane from annotations
-        if classes[class_index] == "aeroplane":
-            continue
+        # if classes[class_index] == "aeroplane":
+        #    continue
 
         # Extract bounding box
         x, y, w, h = boxes[box_index]
 
         # Draw ROI
-        image_to_process = cv2.rectangle(image_to_process, (x, y), (x + w, y + h), colors[class_index], 2)
+        image_to_process = cv2.rectangle(image_to_process, (x, y), (x + w, y + h), colors[class_index], 1)
+
+        # Text
+        roi_text = f"{classes[class_index]}: {(class_scores[box_index] * 100):.0f}%"
+
+        # Draw text background
+        image_to_process = cv2.rectangle(
+            image_to_process,
+            (x, y - 20),
+            (x + len(roi_text) * 10, y),
+            colors[class_index],
+            -1,
+        )
 
         # Draw annotation text
         image_to_process = cv2.putText(
             image_to_process,
-            f"{classes[class_index]}: {(class_scores[box_index] * 100):.2f}%",
-            (x, y - 10),
+            roi_text,
+            (x + 5, y - 5),
             cv2.FONT_HERSHEY_PLAIN,
             1,
-            colors[class_index],
-            2,
+            (255 - colors[class_index][0], 255 - colors[class_index][1], 255 - colors[class_index][2]),
+            1,
             cv2.LINE_AA,
         )
 
@@ -189,8 +203,8 @@ def main() -> None:
             cv2.waitKey(0)
             break
 
-        # Detect, segment and annotate
-        frame = yolo_detect_and_segment(frame, net, out_layers, classes, colors)
+        # Detect, localize and annotate
+        frame = yolo_detect_and_localize(frame, net, out_layers, classes, colors)
 
         # Display the resulting frame
         cv2.imshow("frame", frame)
