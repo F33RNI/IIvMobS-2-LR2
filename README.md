@@ -14,7 +14,7 @@
    2. `f3rni`
    3. `keepalove`
    4. `katiklex`
-   5. `g0n4ar0v` (пока не существует)
+   5. `g0n4ar0v`
    6. `drmoonshine` (пока не существует)
    7. `jundevchik`
 
