@@ -56,7 +56,7 @@ def main() -> None:
     out_layers = [layer_names[index - 1] for index in out_layers_indexes]
 
     # Start OpenCV video cap
-    cap = cv2.VideoCapture("photos/elephant_and_person.jpg")
+    cap = cv2.VideoCapture("photos/giraffe_and_persons.jpg")
 
     # Main loop
     while True:
@@ -105,12 +105,10 @@ def main() -> None:
             # Extract class index
             object_class_index = class_indexes[box_index]
 
-            # Uncomment code below to exclude elephant from annotations
+            # Uncomment code below to exclude giraffe from annotations
             # TODO: REMOVE THIS CODE
-            # if classes[object_class_index] == "elephant":
-            #    continue
-
-            # Extract
+            # if classes[object_class_index] == "giraffe":
+            #   continue
 
             # Draw bounding box
             x, y, w, h = object_boxes[box_index]
