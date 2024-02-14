@@ -30,102 +30,117 @@ import os
 import cv2
 import numpy as np
 
-# Видеофайл / изображение или индекс вебки (TO_DETECT = 0)
-TO_DETECT = "photos/books_and_apples.jpg"
+# Файл или индекс камеры
+FILE_OR_WEBCAM = "photos/person_and_clock.jpg"
 
 
-def detect(frame, coco_net, output_layers):
-    # Размер входной картинки
-    height, width, _ = frame.shape
-
-    # Подготовка списков для сохранения распознанных объектов
-    class_indexes, class_scores, boxes = ([] for _ in range(3))
-
-    # Вход нейросети
-    coco_net.setInput(cv2.dnn.blobFromImage(frame, 1 / 255, (608, 608), (0, 0, 0), swapRB=True, crop=False))
-
-    # Распознавание нейросетью
-    # И разбор результатов на индексы классов, оценки классов и ограничивающие рамки
-    for out in coco_net.forward(output_layers):
-        for obj in out:
-            scores = obj[5:]
-            class_index = np.argmax(scores)
-            class_score = scores[class_index]
-            if class_score > 0:
-                boxes.append(
-                    [
-                        int(obj[0] * width) - int(obj[2] * width) // 2,
-                        int(obj[1] * height) - int(obj[3] * height) // 2,
-                        int(obj[2] * width),
-                        int(obj[3] * height),
-                    ]
-                )
-                class_indexes.append(class_index)
-                class_scores.append(float(class_score))
-
-    # Возвращение локализующих прямоугольников, индексов распознанных классов и вероятностей
-    return boxes, class_indexes, class_scores
-
-
-def draw(frame, boxes, class_indexes, class_scores, classes):
-    # Нарисовать аннотацию и текст для каждого класса c охранённых ограничивающих рамок с порогом nms_threshold > 0.4
-    for box_index in list(cv2.dnn.NMSBoxes(boxes, class_scores, 0.0, 0.4)):
-        # Извлечение индекса класса
-        class_index = class_indexes[box_index]
-
-        # Раскомментируйте код ниже, чтобы исключить книги из аннотаций (конспирация)
-        # TODO: УДАЛИТЬ ЭТОТ КОД ПЕРЕД ВСТАВКОЙ В ОТЧЁТ
-        # if classes[class_index] == "book":
-        #    continue
-
-        # Рамочка и текст класса
-        x, y, w, h = boxes[box_index]
-        frame = cv2.rectangle(frame, (x, y), (x + w, y + h), (69, 33, 0), 2)
-        frame = cv2.putText(
-            frame, classes[class_index].upper(), (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (69, 33, 0), 2
-        )
-
-    return frame
-
-
-def main():
+def main() -> None:
     # Загрузка классов
-    with open(os.path.join("yolov4-tiny", "coco.names.txt"), "r", encoding="utf-8") as file:
-        classes = file.read().split("\n")
+    with open(os.path.join("yolo", "coco.names.txt"), "r", encoding="utf-8") as file:
+        net_classes = file.read().split("\n")
 
     # Загрузка модели из формата Darknet
-    coco_net = cv2.dnn.readNetFromDarknet(
-        os.path.join("yolov4-tiny", "yolov4-tiny.cfg"),
-        os.path.join("yolov4-tiny", "yolov4-tiny.weights"),
+    darknet = cv2.dnn.readNetFromDarknet(
+        os.path.join("yolo", "yolov4-tiny.cfg"),
+        os.path.join("yolo", "yolov4-tiny.weights"),
     )
-    layer_names = coco_net.getLayerNames()
-    out_layers_indexes = coco_net.getUnconnectedOutLayers()
+    layer_names = darknet.getLayerNames()
+    out_layers_indexes = darknet.getUnconnectedOutLayers()
     output_layers = [layer_names[index - 1] for index in out_layers_indexes]
 
+    # Списки для сохранения распознанных объектов
+    class_indexes, class_scores, boxes = ([] for _ in range(3))
+
     # Запуск стрима OpenCV
-    video_capture = cv2.VideoCapture(TO_DETECT)
+    video_capture = cv2.VideoCapture(FILE_OR_WEBCAM)
     while True:
         # Чтение кадра
-        ret, frame = video_capture.read()
+        ret, image = video_capture.read()
 
         # Выход при ошибке или если больше нет кадров
-        if not ret or frame is None:
+        if not ret or image is None:
+            print("Больше нет кадров! Нажмите любую клавишу для выхода")
             cv2.waitKey(0)
             break
 
-        # Распознавание и локализация
-        boxes, class_indexes, class_scores = detect(frame, coco_net, output_layers)
+        # Размер кадра
+        height, width, _ = image.shape
 
-        # Отрисовка
-        frame = draw(frame, boxes, class_indexes, class_scores, classes)
-        cv2.imshow("Prakticheskaya rabota 2", frame)
+        # Вход нейросети
+        darknet.setInput(cv2.dnn.blobFromImage(image, 1 / 255, (608, 608), (0, 0, 0), swapRB=True, crop=False))
 
-        # Нажмите q для выхода
-        if cv2.waitKey(30) & 0xFF == ord("q"):
+        # Распознавание нейросетью
+        # И разбор результатов на индексы классов, оценки классов и ограничивающие рамки
+        for out in darknet.forward(output_layers):
+            for object_ in out:
+                scores = object_[5:]
+                object_class_index = np.argmax(scores)
+                class_score = scores[object_class_index]
+                if class_score > 0:
+                    boxes.append(
+                        [
+                            int(object_[0] * width) - int(object_[2] * width) // 2,
+                            int(object_[1] * height) - int(object_[3] * height) // 2,
+                            int(object_[2] * width),
+                            int(object_[3] * height),
+                        ]
+                    )
+                    class_indexes.append(object_class_index)
+                    class_scores.append(float(class_score))
+
+        # Сохранение ограничивающих рамок с порогом > 0.35
+        object_boxes_filtered = cv2.dnn.NMSBoxes(boxes, class_scores, 0.0, 0.35)
+
+        # Счётчик количества обнаруженных объектов
+        objects_counter = 0
+
+        # Отрисовка каждого распознанного объекта
+        for object_box_index in list(object_boxes_filtered):
+            # Индекс класса (распознанного объекта)
+            object_class_index = class_indexes[object_box_index]
+
+            # Раскомментируйте код ниже, чтобы исключить часы из аннотаций (конспирация)
+            # TODO: УДАЛИТЬ ЭТОТ КОД ПЕРЕД ВСТАВКОЙ В ОТЧЁТ
+            # if net_classes[object_class_index] == "clock":
+            #    continue
+
+            # Прибавляем 1 к количеству обнаруженных объектов
+            objects_counter += 1
+
+            # Координаты и размер рамочки
+            x, y, w, h = boxes[object_box_index]
+
+            # Белая рамка на черном фоне
+            image = cv2.rectangle(image, (x, y), (x + w, y + h), (0, 0, 0), 2)
+            image = cv2.rectangle(image, (x, y), (x + w, y + h), (255, 255, 255), 1)
+
+            # Белый текст на чёрном фоне
+            text = f"{net_classes[object_class_index].upper()}, {class_scores[object_box_index] * 100:.2f}%"
+            image = cv2.putText(image, text, (x, y - 7), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 0), 2)
+            image = cv2.putText(image, text, (x, y - 7), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255), 1)
+
+        # Отображение количества найденных объектов
+        text = f"Total: {objects_counter}"
+        image = cv2.putText(image, text, (5, 20), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 0), 2)
+        image = cv2.putText(image, text, (5, 20), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255), 1)
+
+        # Показываем картинку юзверю
+        cv2.imshow("LR2 katiklex", image)
+
+        # Очищаем списки для следующего цикла
+        class_indexes.clear()
+        class_scores.clear()
+        boxes.clear()
+
+        # Ждём 30мс (для примерно 30фпс) и выходим если была нажата кнопка ESC
+        if cv2.waitKey(30) & 0xFF == 27:
+            print("Нажата клавиша ESC. Выход")
             break
 
-    # Остановка стрима и закрытие окна OpenCV
+    # Закрываем стрим / выключаем камеру
     video_capture.release()
+
+    # Закрываем все окна OpenCV
     cv2.destroyAllWindows()
 
 
