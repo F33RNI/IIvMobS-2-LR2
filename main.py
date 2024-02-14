@@ -125,6 +125,7 @@ def yolo_detect_and_localize(
         class_index = class_indexes[box_index]
 
         # Uncomment code below to exclude aeroplane from annotations
+        # TODO: REMOVE THIS CODE
         # if classes[class_index] == "aeroplane":
         #    continue
 
