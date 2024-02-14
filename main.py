@@ -68,7 +68,8 @@ def detect(frame, coco_net, output_layers):
 
 
 def draw(frame, boxes, class_indexes, class_scores, classes):
-    # Нарисовать аннотацию и текст для каждого класса c охранённых ограничивающих рамок с порогом nms_threshold > 0.4
+    # Сохранение ограничивающих рамок с порогом nms_threshold > 0.4
+    # (позволяет избавиться от двоящихся рамок)
     for box_index in list(cv2.dnn.NMSBoxes(boxes, class_scores, 0.0, 0.4)):
         # Извлечение индекса класса
         class_index = class_indexes[box_index]
