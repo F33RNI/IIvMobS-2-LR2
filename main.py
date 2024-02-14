@@ -25,108 +25,119 @@ OTHER DEALINGS IN THE SOFTWARE.
 For more information, please refer to <https://unlicense.org>
 """
 
+import logging
 import os
 
 import cv2
 import numpy as np
 
-# Видеофайл / изображение или индекс вебки (TO_DETECT = 0)
-TO_DETECT = "photos/books_and_apples.jpg"
 
+def main() -> None:
+    """Main program entry"""
+    # Initialize logging
+    logging.basicConfig(level=logging.INFO)
 
-def detect(frame, coco_net, output_layers):
-    # Размер входной картинки
-    height, width, _ = frame.shape
+    # Load model class names
+    file = open(os.path.join("model", "classes.txt"), "r", encoding="utf-8")
+    classes = file.read().split("\n")
+    file.close()
+    logging.info("Loaded classes.txt")
 
-    # Подготовка списков для сохранения распознанных объектов
-    class_indexes, class_scores, boxes = ([] for _ in range(3))
-
-    # Вход нейросети
-    coco_net.setInput(cv2.dnn.blobFromImage(frame, 1 / 255, (608, 608), (0, 0, 0), swapRB=True, crop=False))
-
-    # Распознавание нейросетью
-    # И разбор результатов на индексы классов, оценки классов и ограничивающие рамки
-    for out in coco_net.forward(output_layers):
-        for obj in out:
-            scores = obj[5:]
-            class_index = np.argmax(scores)
-            class_score = scores[class_index]
-            if class_score > 0:
-                boxes.append(
-                    [
-                        int(obj[0] * width) - int(obj[2] * width) // 2,
-                        int(obj[1] * height) - int(obj[3] * height) // 2,
-                        int(obj[2] * width),
-                        int(obj[3] * height),
-                    ]
-                )
-                class_indexes.append(class_index)
-                class_scores.append(float(class_score))
-
-    # Возвращение локализующих прямоугольников, индексов распознанных классов и вероятностей
-    return boxes, class_indexes, class_scores
-
-
-def draw(frame, boxes, class_indexes, class_scores, classes):
-    # Сохранение ограничивающих рамок с порогом nms_threshold > 0.4
-    # (позволяет избавиться от двоящихся рамок)
-    for box_index in list(cv2.dnn.NMSBoxes(boxes, class_scores, 0.0, 0.4)):
-        # Извлечение индекса класса
-        class_index = class_indexes[box_index]
-
-        # Раскомментируйте код ниже, чтобы исключить книги из аннотаций (конспирация)
-        # TODO: УДАЛИТЬ ЭТОТ КОД ПЕРЕД ВСТАВКОЙ В ОТЧЁТ
-        # if classes[class_index] == "book":
-        #    continue
-
-        # Рамочка и текст класса
-        x, y, w, h = boxes[box_index]
-        frame = cv2.rectangle(frame, (x, y), (x + w, y + h), (69, 33, 0), 2)
-        frame = cv2.putText(
-            frame, classes[class_index].upper(), (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (69, 33, 0), 2
-        )
-
-    return frame
-
-
-def main():
-    # Загрузка классов
-    with open(os.path.join("yolov4-tiny", "coco.names.txt"), "r", encoding="utf-8") as file:
-        classes = file.read().split("\n")
-
-    # Загрузка модели из формата Darknet
-    coco_net = cv2.dnn.readNetFromDarknet(
-        os.path.join("yolov4-tiny", "yolov4-tiny.cfg"),
-        os.path.join("yolov4-tiny", "yolov4-tiny.weights"),
+    # Load YOLO weights and config
+    model = cv2.dnn.readNetFromDarknet(
+        os.path.join("model", "model.cfg"),
+        os.path.join("model", "model.weights"),
     )
-    layer_names = coco_net.getLayerNames()
-    out_layers_indexes = coco_net.getUnconnectedOutLayers()
-    output_layers = [layer_names[index - 1] for index in out_layers_indexes]
+    logging.info("Loaded model.cfg, model.weights")
 
-    # Запуск стрима OpenCV
-    video_capture = cv2.VideoCapture(TO_DETECT)
+    # Parse model layers
+    layer_names = model.getLayerNames()
+    out_layers_indexes = model.getUnconnectedOutLayers()
+    out_layers = [layer_names[index - 1] for index in out_layers_indexes]
+
+    # Start OpenCV video cap
+    cap = cv2.VideoCapture("photos/elephant_and_person.jpg")
+
+    # Main loop
     while True:
-        # Чтение кадра
-        ret, frame = video_capture.read()
+        # Capture the video image by image
+        ret, image = cap.read()
 
-        # Выход при ошибке или если больше нет кадров
-        if not ret or frame is None:
+        # Exit if error or image is None
+        if not ret or image is None:
+            # Wait for any key and exit
+            logging.info("Press eny key to exit")
             cv2.waitKey(0)
             break
 
-        # Распознавание и локализация
-        boxes, class_indexes, class_scores = detect(frame, coco_net, output_layers)
+        # Retrieve image's dimentions
+        frame_h, frame_w, _ = image.shape
 
-        # Отрисовка
-        frame = draw(frame, boxes, class_indexes, class_scores, classes)
-        cv2.imshow("Prakticheskaya rabota 2", frame)
+        # Resize image to 608x608 and convert BGR to RGB and divide each pixel value to 255
+        image_blob = cv2.dnn.blobFromImage(image, 1 / 255, (608, 608), (0, 0, 0), swapRB=True, crop=False)
 
-        # Нажмите q для выхода
-        if cv2.waitKey(30) & 0xFF == ord("q"):
+        # Feed image to model
+        model.setInput(image_blob)
+        model_outputs = model.forward(out_layers)
+
+        # Parse results into class_indexes, class_scores and bounding object_boxes
+        class_indexes, class_scores, object_boxes = ([] for _ in range(3))
+        for model_output in model_outputs:
+            for detected_object in model_output:
+                scores = detected_object[5:]
+                object_class_index = np.argmax(scores)
+                class_score = scores[object_class_index]
+                if class_score > 0:
+                    center_x = int(detected_object[0] * frame_w)
+                    center_y = int(detected_object[1] * frame_h)
+                    obj_width = int(detected_object[2] * frame_w)
+                    obj_height = int(detected_object[3] * frame_h)
+                    box = [center_x - obj_width // 2, center_y - obj_height // 2, obj_width, obj_height]
+                    object_boxes.append(box)
+                    class_indexes.append(object_class_index)
+                    class_scores.append(float(class_score))
+
+        # prevent duplicated detections
+        filtered_boxes = cv2.dnn.NMSBoxes(object_boxes, class_scores, 0.0, 0.4)
+
+        # List each detected and filtered object
+        for box_index in list(filtered_boxes):
+            # Extract class index
+            object_class_index = class_indexes[box_index]
+
+            # Uncomment code below to exclude elephant from annotations
+            # TODO: REMOVE THIS CODE
+            # if classes[object_class_index] == "elephant":
+            #    continue
+
+            # Extract
+
+            # Draw bounding box
+            x, y, w, h = object_boxes[box_index]
+            image = cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 255), 2)
+
+            # Draw text
+            image = cv2.putText(
+                image,
+                f"{classes[object_class_index]}: {(class_scores[box_index] * 100):.2f}%",
+                (x, y - 15),
+                cv2.FONT_HERSHEY_PLAIN,
+                2,
+                (0, 255, 255),
+                2,
+            )
+
+        # open image as window
+        cv2.imshow("image", image)
+
+        # Press ESC to quit
+        if cv2.waitKey(30) & 0xFF == 27:
             break
 
-    # Остановка стрима и закрытие окна OpenCV
-    video_capture.release()
+    # Release file / close camera
+    cap.release()
+
+    # Destroy OpenCV windows
     cv2.destroyAllWindows()
 
 
