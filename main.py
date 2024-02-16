@@ -31,7 +31,7 @@ import cv2
 import numpy as np
 
 # Файл / стрим / камера для cv2.VideoCapture
-STREAM_SOURCE = "photos/barbie_with_scirrors_2.jpg"
+STREAM_SOURCE = "watercutting.mp4"
 
 # Путь к директории с class_names.txt, model.cfg и model.weights
 MODEL_DIR = "model"
