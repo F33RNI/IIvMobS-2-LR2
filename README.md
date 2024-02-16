@@ -15,7 +15,7 @@
    3. `keepalove`
    4. `katiklex`
    5. `g0n4ar0v`
-   6. `drmoonshine`
+   6. `drmoonshine` (пока не существует)
    7. `jundevchik`
 
 ----------
@@ -70,5 +70,6 @@
 - 5. Слон - `elephant`
 - 8. Жираф - `giraffe`
 - 14. Книга - `book`
+- 15. Ножницы - `scissors`
 - 16. Часы - `clock`
 - 17. Самолет - `aeroplane`
