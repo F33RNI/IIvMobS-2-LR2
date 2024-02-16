@@ -30,103 +30,102 @@ import os
 import cv2
 import numpy as np
 
-# Видеофайл / изображение или индекс вебки (TO_DETECT = 0)
-TO_DETECT = "photos/books_and_apples.jpg"
+# Файл / стрим / камера для cv2.VideoCapture
+STREAM_SOURCE = "photos/barbie_with_scirrors_2.jpg"
 
+# Путь к директории с class_names.txt, model.cfg и model.weights
+MODEL_DIR = "model"
 
-def detect(frame, coco_net, output_layers):
-    # Размер входной картинки
-    height, width, _ = frame.shape
-
-    # Подготовка списков для сохранения распознанных объектов
-    class_indexes, class_scores, boxes = ([] for _ in range(3))
-
-    # Вход нейросети
-    coco_net.setInput(cv2.dnn.blobFromImage(frame, 1 / 255, (608, 608), (0, 0, 0), swapRB=True, crop=False))
-
-    # Распознавание нейросетью
-    # И разбор результатов на индексы классов, оценки классов и ограничивающие рамки
-    for out in coco_net.forward(output_layers):
-        for obj in out:
-            scores = obj[5:]
-            class_index = np.argmax(scores)
-            class_score = scores[class_index]
-            if class_score > 0:
-                boxes.append(
-                    [
-                        int(obj[0] * width) - int(obj[2] * width) // 2,
-                        int(obj[1] * height) - int(obj[3] * height) // 2,
-                        int(obj[2] * width),
-                        int(obj[3] * height),
-                    ]
-                )
-                class_indexes.append(class_index)
-                class_scores.append(float(class_score))
-
-    # Возвращение локализующих прямоугольников, индексов распознанных классов и вероятностей
-    return boxes, class_indexes, class_scores
-
-
-def draw(frame, boxes, class_indexes, class_scores, classes):
-    # Сохранение ограничивающих рамок с порогом nms_threshold > 0.4
-    # (позволяет избавиться от двоящихся рамок)
-    for box_index in list(cv2.dnn.NMSBoxes(boxes, class_scores, 0.0, 0.4)):
-        # Извлечение индекса класса
-        class_index = class_indexes[box_index]
-
-        # Раскомментируйте код ниже, чтобы исключить книги из аннотаций (конспирация)
-        # TODO: УДАЛИТЬ ЭТОТ КОД ПЕРЕД ВСТАВКОЙ В ОТЧЁТ
-        # if classes[class_index] == "book":
-        #    continue
-
-        # Рамочка и текст класса
-        x, y, w, h = boxes[box_index]
-        frame = cv2.rectangle(frame, (x, y), (x + w, y + h), (69, 33, 0), 2)
-        frame = cv2.putText(
-            frame, classes[class_index].upper(), (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (69, 33, 0), 2
-        )
-
-    return frame
+# Классы, с распознанной вероятностью менее 20% не будут учитываться
+MIN_SCORE = 0.2
 
 
 def main():
-    # Загрузка классов
-    with open(os.path.join("yolov4-tiny", "coco.names.txt"), "r", encoding="utf-8") as file:
-        classes = file.read().split("\n")
-
     # Загрузка модели из формата Darknet
-    coco_net = cv2.dnn.readNetFromDarknet(
-        os.path.join("yolov4-tiny", "yolov4-tiny.cfg"),
-        os.path.join("yolov4-tiny", "yolov4-tiny.weights"),
-    )
-    layer_names = coco_net.getLayerNames()
-    out_layers_indexes = coco_net.getUnconnectedOutLayers()
-    output_layers = [layer_names[index - 1] for index in out_layers_indexes]
+    model = cv2.dnn.readNetFromDarknet(os.path.join(MODEL_DIR, "model.cfg"), os.path.join(MODEL_DIR, "model.weights"))
+    model_output_layers = [model.getLayerNames()[i - 1] for i in model.getUnconnectedOutLayers()]
+
+    # Загрузка категорий объектов
+    with open(os.path.join(MODEL_DIR, "class_names.txt"), "r", encoding="utf-8") as file:
+        categories = file.read().split("\n")
+
+    # Локальные переменные
+    objects_indexes, objects_scores, objects_rois = ([] for _ in range(3))
 
     # Запуск стрима OpenCV
-    video_capture = cv2.VideoCapture(TO_DETECT)
+    cap = cv2.VideoCapture(STREAM_SOURCE)
     while True:
         # Чтение кадра
-        ret, frame = video_capture.read()
+        _, frame = cap.read()
 
-        # Выход при ошибке или если больше нет кадров
-        if not ret or frame is None:
+        # Нажмите любую клавишу для выхода если больше нет кадров
+        if frame is None:
             cv2.waitKey(0)
             break
 
-        # Распознавание и локализация
-        boxes, class_indexes, class_scores = detect(frame, coco_net, output_layers)
+        # Размер изображения
+        frame_h, frame_w, _ = frame.shape
 
-        # Отрисовка
-        frame = draw(frame, boxes, class_indexes, class_scores, classes)
-        cv2.imshow("Prakticheskaya rabota 2", frame)
+        # Прогон через модель
+        model.setInput(cv2.dnn.blobFromImage(frame, 1 / 255, (608, 608), (0, 0, 0), swapRB=True, crop=False))
+        model_outputs = model.forward(model_output_layers)
 
-        # Нажмите q для выхода
+        # Парсинг каждого выхода
+        for model_output in model_outputs:
+            for detected_object in model_output:
+                # Проценты
+                scores_per_object = detected_object[5:]
+
+                # Индекс распознанного объекта
+                object_index = np.argmax(scores_per_object)
+
+                # Процент
+                object_score = scores_per_object[object_index]
+
+                # Подходит ли
+                if object_score > MIN_SCORE:
+                    box_x = int(detected_object[0] * frame_w) - int(detected_object[2] * frame_w) // 2
+                    box_y = int(detected_object[1] * frame_h) - int(detected_object[3] * frame_h) // 2
+                    box_w = int(detected_object[2] * frame_w)
+                    box_h = int(detected_object[3] * frame_h)
+
+                    objects_rois.append([box_x, box_y, box_w, box_h])
+                    objects_indexes.append(object_index)
+                    objects_scores.append(float(object_score))
+
+        # Убираем двоящиеся локализации используя порог < 0.3
+        for roi_index in list(cv2.dnn.NMSBoxes(objects_rois, objects_scores, 0.0, 0.3)):
+            # Координаты и размер зоны локализации
+            x, y, w, h = objects_rois[roi_index]
+
+            # Рамочка
+            frame = cv2.rectangle(frame, (x, y), (x + w, y + h), (138, 33, 224), 4)
+
+            # Текст
+            frame = cv2.putText(
+                frame,
+                f"{categories[objects_indexes[roi_index]].upper()}: {objects_scores[roi_index] * 100:.1f}%",
+                (x, y - 5),
+                cv2.FONT_HERSHEY_COMPLEX,
+                1,
+                (138, 33, 224),
+                2,
+            )
+
+        # Чистим переменные
+        objects_indexes.clear()
+        objects_scores.clear()
+        objects_rois.clear()
+
+        # Показываем юзверю
+        cv2.imshow("LR2 Malkina Anastasia", frame)
+
+        # Нажмити q для выхода
         if cv2.waitKey(30) & 0xFF == ord("q"):
             break
 
-    # Остановка стрима и закрытие окна OpenCV
-    video_capture.release()
+    # Закрываем стрим и все окна
+    cap.release()
     cv2.destroyAllWindows()
 
 
