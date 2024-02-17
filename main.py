@@ -25,109 +25,69 @@ OTHER DEALINGS IN THE SOFTWARE.
 For more information, please refer to <https://unlicense.org>
 """
 
+import logging
 import os
 
 import cv2
-import numpy as np
 
-# Видеофайл / изображение или индекс вебки (TO_DETECT = 0)
-TO_DETECT = "photos/books_and_apples.jpg"
+from detect import detect
+from draw import draw
 
-
-def detect(frame, coco_net, output_layers):
-    # Размер входной картинки
-    height, width, _ = frame.shape
-
-    # Подготовка списков для сохранения распознанных объектов
-    class_indexes, class_scores, boxes = ([] for _ in range(3))
-
-    # Вход нейросети
-    coco_net.setInput(cv2.dnn.blobFromImage(frame, 1 / 255, (608, 608), (0, 0, 0), swapRB=True, crop=False))
-
-    # Распознавание нейросетью
-    # И разбор результатов на индексы классов, оценки классов и ограничивающие рамки
-    for out in coco_net.forward(output_layers):
-        for obj in out:
-            scores = obj[5:]
-            class_index = np.argmax(scores)
-            class_score = scores[class_index]
-            if class_score > 0:
-                boxes.append(
-                    [
-                        int(obj[0] * width) - int(obj[2] * width) // 2,
-                        int(obj[1] * height) - int(obj[3] * height) // 2,
-                        int(obj[2] * width),
-                        int(obj[3] * height),
-                    ]
-                )
-                class_indexes.append(class_index)
-                class_scores.append(float(class_score))
-
-    # Возвращение локализующих прямоугольников, индексов распознанных классов и вероятностей
-    return boxes, class_indexes, class_scores
-
-
-def draw(frame, boxes, class_indexes, class_scores, classes):
-    # Сохранение ограничивающих рамок с порогом nms_threshold > 0.4
-    # (позволяет избавиться от двоящихся рамок)
-    for box_index in list(cv2.dnn.NMSBoxes(boxes, class_scores, 0.0, 0.4)):
-        # Извлечение индекса класса
-        class_index = class_indexes[box_index]
-
-        # Раскомментируйте код ниже, чтобы исключить книги из аннотаций (конспирация)
-        # TODO: УДАЛИТЬ ЭТОТ КОД ПЕРЕД ВСТАВКОЙ В ОТЧЁТ
-        # if classes[class_index] == "book":
-        #    continue
-
-        # Рамочка и текст класса
-        x, y, w, h = boxes[box_index]
-        frame = cv2.rectangle(frame, (x, y), (x + w, y + h), (69, 33, 0), 2)
-        frame = cv2.putText(
-            frame, classes[class_index].upper(), (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (69, 33, 0), 2
-        )
-
-    return frame
+# Имя файла для распознавания / индекс камеры
+# "photos/zebra_and_horse.jpg"
+# "videos/zebras_stock.mp4"
+SOURCE_FILE = "photos/zebra_and_horse.jpg"
 
 
 def main():
-    # Загрузка классов
-    with open(os.path.join("yolov4-tiny", "coco.names.txt"), "r", encoding="utf-8") as file:
-        classes = file.read().split("\n")
+    # Настройка логирования
+    logging.basicConfig(level=logging.INFO)
 
-    # Загрузка модели из формата Darknet
-    coco_net = cv2.dnn.readNetFromDarknet(
-        os.path.join("yolov4-tiny", "yolov4-tiny.cfg"),
-        os.path.join("yolov4-tiny", "yolov4-tiny.weights"),
+    # Чтение классов
+    with open(os.path.join("coco.model", "coco.names.txt"), "r", encoding="utf-8") as file:
+        coco_classes = file.read().split("\n")
+
+    # Чтение Darknet - модели
+    model = cv2.dnn.readNetFromDarknet(
+        os.path.join("coco.model", "coco.model.cfg"),
+        os.path.join("coco.model", "coco.model.weights"),
     )
-    layer_names = coco_net.getLayerNames()
-    out_layers_indexes = coco_net.getUnconnectedOutLayers()
-    output_layers = [layer_names[index - 1] for index in out_layers_indexes]
+    output_layers_names = [model.getLayerNames()[index - 1] for index in model.getUnconnectedOutLayers()]
 
-    # Запуск стрима OpenCV
-    video_capture = cv2.VideoCapture(TO_DETECT)
+    # Загрузка завершена
+    logging.info("Модель и классы готовы")
+
+    # Запуск потока OpenCV
+    logging.info("Начало чтения видеопотока")
+    cv_cap = cv2.VideoCapture(SOURCE_FILE)
+    if cv_cap is not None:
+        logging.info("Видеопоток запущен. Нажмите ESC для выхода")
+
     while True:
-        # Чтение кадра
-        ret, frame = video_capture.read()
+        # Считывание кадра
+        ret, frame = cv_cap.read()
 
-        # Выход при ошибке или если больше нет кадров
+        # Прерывание при ошибке или отсутствии кадров
         if not ret or frame is None:
+            logging.warning("Кадры закончились! Для выхода нажмите любую клавишу")
             cv2.waitKey(0)
             break
 
-        # Распознавание и локализация
-        boxes, class_indexes, class_scores = detect(frame, coco_net, output_layers)
+        # Обнаружение и локализация
+        object_boxes, detected_indexes, detected_objects_scores = detect(frame, model, output_layers_names)
 
-        # Отрисовка
-        frame = draw(frame, boxes, class_indexes, class_scores, classes)
-        cv2.imshow("Prakticheskaya rabota 2", frame)
+        # Визуализация
+        frame = draw(frame, object_boxes, detected_indexes, detected_objects_scores, coco_classes)
+        cv2.imshow("PR2 Elvira", frame)
 
-        # Нажмите q для выхода
-        if cv2.waitKey(30) & 0xFF == ord("q"):
+        # Для выхода нажмите ESC
+        if cv2.waitKey(30) & 0xFF == 27:
             break
 
-    # Остановка стрима и закрытие окна OpenCV
-    video_capture.release()
+    # Закрытие потока и окна OpenCV
+    cv_cap.release()
     cv2.destroyAllWindows()
+    logging.warning("Всё закрыто, до свидания :(")
 
 
 if __name__ == "__main__":
