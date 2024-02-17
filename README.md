@@ -19,6 +19,8 @@
 5. `g0n4ar0v`
 6. `drmoonshine` <
 7. `jundevchik`
+8. `nastasya`
+9. `zebra`
 
 ----------
 
