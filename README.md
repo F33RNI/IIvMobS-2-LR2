@@ -10,13 +10,15 @@
 
 Для этого, разверните список веток (там, где первая ветка называется main). Список веток:
 
-   1. `main` <
-   2. `f3rni`
-   3. `keepalove`
-   4. `katiklex`
-   5. `g0n4ar0v`
-   6. `drmoonshine` (пока не существует)
-   7. `jundevchik`
+1. `main` <
+2. `f3rni`
+3. `keepalove`
+4. `katiklex`
+5. `g0n4ar0v`
+6. `drmoonshine`
+7. `jundevchik`
+8. `nastasya`
+9. `zebra`
 
 ----------
 
